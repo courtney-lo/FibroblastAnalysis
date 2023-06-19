@@ -1,0 +1,104 @@
+# import necessary libraries
+library(limma)
+library(minfi)
+library(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+library(IlluminaHumanMethylation450kmanifest)
+library(RColorBrewer)
+library(missMethyl)
+library(matrixStats)
+library(minfiData)
+library(Gviz)
+library(DMRcate)
+library(stringr)
+library("xlsx")
+library(lintr)
+
+# include Illumina 450K annotation
+ann450k <- getAnnotation(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+head(ann450k)
+
+# load data using relative path
+dataDirectory <- "/Users/courtneylo/Desktop/AgingFBL/"
+list.files(dataDirectory, recursive = TRUE)
+dataDirectory
+
+# load template sheet
+targets <- read.metharray.sheet(dataDirectory, pattern="Fibroblasts_EPIC_sample sheet_01032023.csv")
+targets
+SampleName <- targets$Sample_Name
+SampleName
+
+# load raw data
+rgSet <- read.table("/Users/courtneylo/Desktop/AgingFBL/FibroblastsOnly_BMIQnorm.txt")
+rgSet
+
+# change type to dataframe depending on raw data file type
+df <- data.frame(rgSet)
+repeatSample <- head(df, 1)
+repeatSample
+
+infected <- read.xlsx("/Users/courtneylo/Desktop/AgingFBL/ClinicalCharacteristics_AgingStudy.xlsx", sheetIndex = 1)
+infected
+
+cellType <- factor(infected$Active)
+cellType
+
+individual <- factor(targets$Sample_ID)
+individual
+
+
+# design matrix for what contrasts the analysis is being run for
+design <- model.matrix(~0+cellType, data=rgSet)
+design
+
+contMatrix <- makeContrasts(cellTypeY-cellTypeN,
+                            levels=design)
+contMatrix
+
+bVals <- read.table("/Users/courtneylo/Desktop/AgingFBL/FibroblastsOnly_BMIQnorm.txt")
+bVal_matrix <- as.matrix(bVals)
+bVal_matrix
+
+
+# edit formatting of matrix (include row and column names)
+# row names
+rownames(bVal_matrix) <- bVal_matrix[,1]
+bVal_matrix2 <- bVal_matrix[,-1]
+
+# column names
+colnames(bVal_matrix2) <- c(individual)
+columnName = colnames(bVal_matrix2)
+bVal_matrix2 <- bVal_matrix2[-1,]
+
+rn <- rownames(bVal_matrix2)
+bVal_matrix2 <- apply(bVal_matrix2,2,as.numeric)
+rownames(bVal_matrix2) <- rn
+bVal_matrix2
+
+# include y-intercept column in design for later analysis use
+design3 <- model.matrix(~1+cellType, data=rgSet)
+design3
+
+myAnnotation <- cpg.annotate(bVal_matrix2, datatype = "array", what = "B", analysis.type = "differential", design3, coef = 1, arraytype = "450K")
+myAnnotation
+str(myAnnotation)
+
+# differential methylation analysis of regions
+DMRs <- dmrcate(myAnnotation, lambda=1000, C=2)
+DMRs
+extractRanges(DMRs)
+
+data(DMRs)
+results <- extractRanges(DMRs, genome = "hg19")
+results
+
+# create graph for results
+groups <- 1:length(unique(targets$Sample_Name))
+names(groups) <- levels(factor(targets$Sample_Name))
+cols <- groups[as.character(factor(targets$Sample_Name))]
+samps <- 1:nrow(targets)
+
+par(mfrow=c(1,1))
+DMR.plot(ranges=results, dmr=1, CpGs=bVal_matrix2, phen.col=cols, what = "Beta",
+         arraytype = "450K", pch=16, toscale=TRUE, plotmedians=TRUE, 
+         genome="hg19", samps=samps)
