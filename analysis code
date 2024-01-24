@@ -102,3 +102,33 @@ par(mfrow=c(1,1))
 DMR.plot(ranges=results, dmr=1, CpGs=bVal_matrix2, phen.col=cols, what = "Beta",
          arraytype = "450K", pch=16, toscale=TRUE, plotmedians=TRUE, 
          genome="hg19", samps=samps)
+
+# GO Analysis:
+fit <- lmFit(bval_matrix2, design2)
+treat(fit)
+
+fit2 <- contrasts.fit(fit, contMatrix)
+summary(decideTests(fit2))
+
+e_fit2 <-eBayes(fit2)
+DMPs <- topTable(e_fit2, num=Inf, coef=1)
+head(DMPs)
+
+d <- DMPs
+names <- rownames(d)
+data <- cbind(names,d)
+data
+
+sigCpGs <- data$names[data$adj.P.Val<0.05]
+sigCpGs[1:10]
+length(sigCpGs)
+
+par(mfrow=c(1,1))
+gst <- gometh(sig.cpg=sigCpGs, all.cpg=NULL, array.type="450K", plot.bias=TRUE)
+gst
+
+IDs <- getMappedEntrezIDs(sig.cpg=sigCpGs, array.type="450K")
+IDs
+
+gsa <- gsameth(sig.cpg=sigCpGs, all.cpg=IDs, collection="GO", array.type="450K", plot.bias = true, anno = ann)
+gsa
